@@ -1,0 +1,49 @@
+imputed_data1 <- complete(mi, action = 15)
+
+proteins_to_exclude <- c()
+
+df <- imputed_data1
+protein_columns <- setdiff(colnames(df)[c(2:277)], proteins_to_exclude)
+
+results_table <- data.frame(
+    Protein = character(),
+    Coef = numeric(),
+    #  Odds_Ratio = numeric(),
+    #  CI_Lower = numeric(),
+    #  CI_Upper = numeric(),
+    SE = numeric(),
+    Uncorrected_P_Value = numeric(),
+    bonferroni_Correct_P_Value = numeric(),
+    fdr_Corrected_P_Value = numeric(),
+    stringsAsFactors = FALSE
+  )
+
+  for (protein_name in protein_columns) {
+      fit <- with(data = mi, exp=lm(get(protein_name) ~ as.numeric(socialisolation) + age + sexlsi + race + wealthquintile)) #Repeated for loneliness
+      # + education + bmicont + smoking + drinking + physactivity
+      summary_fit <- summary(pool(fit))
+      
+      # Extract relevant information
+      coef <- summary_fit[2, 2]
+      se <- summary_fit[2, 3]
+      #  or <- exp(coef)
+      p_value <- summary_fit[2, 6]
+      #  z <- qnorm(0.975)
+      #  ci_lower <- or * exp(-z * se)
+      #  ci_upper <- or * exp(z * se)
+      
+      # Apply FDR correction to the p-values
+      num_proteins <- length(protein_columns)
+      fdr_corrected_p <- p.adjust(p_value, method = "fdr", n = num_proteins)
+      
+      results_table <- rbind(results_table, data.frame(
+        Protein = protein_name,
+        Coef = coef,
+        SE = se,
+        #    Odds_Ratio = or,
+        #    CI_Lower = ci_lower,
+        #    CI_Upper = ci_upper,
+        Uncorrected_P_Value = p_value,
+        fdr_Corrected_P_Value = fdr_corrected_p
+      ))
+    }
