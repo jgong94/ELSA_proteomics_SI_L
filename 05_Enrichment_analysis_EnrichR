@@ -1,0 +1,68 @@
+
+library(dplyr)
+library(ggplot2)
+library(viridis)
+
+# Read the datasets
+GO_BP <- read.table("GO_Biological_Process_2023_table.txt", header = TRUE, sep = "\t")
+GO_CC <- read.table("GO_Cellular_Component_2023_table.txt", header = TRUE, sep = "\t")
+GO_MF <- read.table("GO_Molecular_Function_2023_table.txt", header = TRUE, sep = "\t")
+KEGG <- read.table("KEGG_2021_Human_table.txt", header = TRUE, sep = "\t")
+REACTOME <- read.table("Reactome_2022_table.txt", header = TRUE, sep = "\t")
+GTEx <- read.table("GTEx_Tissues_V8_2023_table.txt",header = TRUE, sep = "\t")
+
+# Combine datasets using dplyr's bind_rows function
+combined_data <- bind_rows(
+  GO_CC %>% mutate(dataset = "GO_CC"),
+  GO_MF %>% mutate(dataset = "GO_MF"),
+  GO_BP %>% mutate(dataset = "GO_BP"),
+  KEGG %>% mutate(dataset = "KEGG"),
+  GTEx %>% mutate(dataset = "GTEx"),
+  REACTOME %>% mutate(dataset = "REACTOME")
+)
+
+# Display the combined data
+print(combined_data)
+colnames(combined_data)
+
+enrich <- subset(combined_data, select = -c(Old.P.value, Old.Adjusted.P.value))
+colnames(enrich)
+
+enrich$fdr_p <- (-log10(enrich$Adjusted.P.value))
+
+# Arrange the dataframe by dataset and then by Term
+enrich <- enrich %>%
+  arrange(dataset, Term)
+
+enrich <- subset(enrich, P.value < 0.05)
+
+# Choose a viridis palette that supports the desired number of colors
+viridis_palette <- viridis_pal()(6)
+
+# Set up the plot dimensions and margins
+width <- max(nchar(enrich$Term)) * 0.5  # Adjust the factor (0.35) as needed
+height <- 6  # Adjust the height as needed
+margin_factor <- 1.5  # Adjust the margin factor as needed
+
+p <- ggplot(enrich, aes(x = factor(Term, levels = Term), y = fdr_p, fill = dataset)) +
+  geom_bar(stat = "identity", width = 0.9) +
+  geom_text(aes(label = Genes), hjust = -0.1, size = 5, angle = 90, color = "black") +
+  scale_fill_manual(values = viridis_palette, name = "") +  # Remove legend title
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 80, hjust = 1, size = 20, color = ifelse(enrich$fdr_p > 1.30103, "firebrick2", "black")),
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(size = 12, margin = margin(t = 0, r = 20, b = 0, l = 0)),
+    legend.text = element_text(size = 15), 
+    legend.title = element_blank()  # Remove legend title
+  ) +
+  coord_cartesian(ylim = c(0, max(enrich$fdr_p) * 1.3), xlim = c(0, nrow(enrich) + margin_factor)) +  # Expand x-axis limits
+  geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red") + #Change the correct fdr p-value level
+  annotate("text", x = 1, y = 1.30103 + 0.3, hjust = -0.2, label = "PFDR < 0.05", color = "red", size = 7) + 
+  labs(y = expression(-log[10]("P FDR")))
+
+# Adjust the plot dimensions
+ggsave("enrich_si.png", plot = p, width = 40, height = 30, units = "in")
+
+print(p)
